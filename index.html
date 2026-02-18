@@ -1,0 +1,593 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>delaware Manufacturing Playbook</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            delaware: { DEFAULT: '#C8102E', dark: '#a00d24', light: '#f9e8eb' },
+          }
+        }
+      }
+    }
+  </script>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap');
+    body { font-family: 'Inter', sans-serif; }
+    .storyline-card { transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1); }
+    .storyline-content { max-height: 0; overflow: hidden; transition: max-height 0.4s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.3s ease; opacity: 0; }
+    .storyline-content.open { max-height: 5000px; opacity: 1; }
+    .chevron { transition: transform 0.3s ease; }
+    .chevron.open { transform: rotate(180deg); }
+    .persona-card { transition: all 0.2s ease; }
+    .persona-card:hover { transform: translateY(-2px); box-shadow: 0 8px 25px rgba(0,0,0,0.1); }
+    .persona-card.selected { box-shadow: 0 0 0 2px #C8102E; }
+    .segment-chip { transition: all 0.15s ease; }
+    .fade-in { animation: fadeIn 0.3s ease; }
+    @keyframes fadeIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
+    .section-block { border-radius: 10px; padding: 16px 20px; margin-bottom: 12px; }
+  </style>
+</head>
+<body class="bg-gray-50 min-h-screen">
+  <div id="root"></div>
+
+  <script src="data.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
+  <script src="https://unpkg.com/react@18/umd/react.production.min.js" crossorigin></script>
+  <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js" crossorigin></script>
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+
+  <script type="text/babel">
+    const { useState, useMemo, useCallback, useEffect } = React;
+
+    // ─── Supabase Config ───
+    // Replace these with your Supabase project URL and anon key
+    const SUPABASE_URL = '';  // e.g. 'https://xxxxx.supabase.co'
+    const SUPABASE_ANON_KEY = '';  // e.g. 'eyJhbGciOi...'
+
+    // ─── Data Loading Hook ───
+    function usePlaybookData() {
+      const [data, setData] = useState(null);
+      const [loading, setLoading] = useState(true);
+      const [source, setSource] = useState('static');
+
+      useEffect(() => {
+        async function fetchFromSupabase() {
+          if (!SUPABASE_URL || !SUPABASE_ANON_KEY) {
+            // No Supabase configured — use static data.js
+            setData({ personas: PERSONAS, subSegments: SUB_SEGMENTS, storylines: STORYLINES });
+            setSource('static');
+            setLoading(false);
+            return;
+          }
+
+          try {
+            const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+            const [personasRes, segmentsRes, storylinesRes, contentRes] = await Promise.all([
+              supabase.from('personas').select('*'),
+              supabase.from('sub_segments').select('*'),
+              supabase.from('storylines').select('*').order('sort_order'),
+              supabase.from('storyline_content').select('*'),
+            ]);
+
+            if (personasRes.error || segmentsRes.error || storylinesRes.error || contentRes.error) {
+              throw new Error('Supabase query error');
+            }
+
+            // Transform personas: snake_case → camelCase
+            const personas = personasRes.data.map(p => ({
+              id: p.id, label: p.label, subtitle: p.subtitle, emoji: p.emoji, focus: p.focus,
+              careMost: p.care_most, keepsUpAtNight: p.keeps_up_at_night,
+            }));
+
+            // Transform sub_segments
+            const subSegments = segmentsRes.data.map(s => ({
+              id: s.id, label: s.label, short: s.short, description: s.description,
+            }));
+
+            // Transform storylines + attach content per persona
+            const storylines = storylinesRes.data.map(sl => {
+              const personasObj = {};
+              contentRes.data
+                .filter(c => c.storyline_id === sl.id)
+                .forEach(c => {
+                  personasObj[c.persona_id] = {
+                    painPoint: c.pain_point,
+                    strategicTalkingPoints: c.strategic_talking_points,
+                    tacticalSolutions: c.tactical_solutions,
+                    marketInsights: c.market_insights,
+                    referenceCustomers: c.reference_customers,
+                    conversationStarters: c.conversation_starters,
+                  };
+                });
+              return {
+                id: sl.id, name: sl.name, icon: sl.icon, accent: sl.accent,
+                relevantSegments: sl.relevant_segments, personas: personasObj,
+              };
+            });
+
+            setData({ personas, subSegments, storylines });
+            setSource('supabase');
+          } catch (err) {
+            console.warn('Supabase fetch failed, falling back to static data:', err);
+            setData({ personas: PERSONAS, subSegments: SUB_SEGMENTS, storylines: STORYLINES });
+            setSource('static-fallback');
+          } finally {
+            setLoading(false);
+          }
+        }
+        fetchFromSupabase();
+      }, []);
+
+      return { data, loading, source };
+    }
+
+    // ─── Header ───
+    function Header({ persona, segment, onBack }) {
+      return (
+        <header className="bg-white border-b border-gray-200 sticky top-0 z-50 shadow-sm">
+          <div className="max-w-5xl mx-auto px-4 py-3 flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <div className="w-8 h-8 bg-delaware rounded-md flex items-center justify-center">
+                <span className="text-white font-bold text-lg">d</span>
+              </div>
+              <div>
+                <h1 className="text-base font-bold text-gray-900 leading-tight">Manufacturing Playbook</h1>
+                <p className="text-xs text-gray-400">delaware</p>
+              </div>
+            </div>
+            <div className="flex items-center gap-2">
+              {persona && (
+                <>
+                  <div className="hidden sm:flex items-center gap-2 text-sm text-gray-600">
+                    <span className="bg-gray-100 px-2.5 py-1 rounded-full text-xs font-medium">
+                      {persona.emoji} {persona.label}
+                    </span>
+                    {segment && (
+                      <span className="bg-gray-100 px-2.5 py-1 rounded-full text-xs font-medium">
+                        {segment.short}
+                      </span>
+                    )}
+                  </div>
+                  <button
+                    onClick={onBack}
+                    className="text-xs text-delaware hover:text-delaware-dark font-medium px-3 py-1.5 rounded-md hover:bg-red-50 transition-colors"
+                  >
+                  Change
+                </button>
+              </div>
+            )}
+          </div>
+        </header>
+      );
+    }
+
+    // ─── Persona Card ───
+    function PersonaCard({ persona, selected, onClick }) {
+      return (
+        <button
+          onClick={onClick}
+          className={`persona-card text-left w-full p-5 rounded-xl border-2 transition-all ${
+            selected
+              ? 'border-delaware bg-red-50 shadow-md'
+              : 'border-gray-200 bg-white hover:border-gray-300'
+          }`}
+        >
+          <div className="text-3xl mb-2">{persona.emoji}</div>
+          <h3 className="font-bold text-gray-900 text-lg">{persona.label}</h3>
+          <p className="text-sm text-gray-500 font-medium">{persona.subtitle}</p>
+          <p className="text-xs text-gray-400 mt-2 leading-relaxed">{persona.focus}</p>
+        </button>
+      );
+    }
+
+    // ─── Persona Profile Card ───
+    function PersonaProfile({ persona }) {
+      return (
+        <div className="fade-in bg-white rounded-xl border border-gray-200 p-5 mt-6 shadow-sm">
+          <div className="flex items-center gap-3 mb-4">
+            <span className="text-2xl">{persona.emoji}</span>
+            <div>
+              <h3 className="font-bold text-gray-900">{persona.label} <span className="font-normal text-gray-400">({persona.subtitle})</span></h3>
+            </div>
+          </div>
+          <div className="grid md:grid-cols-2 gap-5">
+            <div>
+              <h4 className="text-xs font-semibold text-delaware uppercase tracking-wider mb-2">What they care most about</h4>
+              <ul className="space-y-1.5">
+                {persona.careMost.map((item, i) => (
+                  <li key={i} className="text-sm text-gray-600 flex items-start gap-2">
+                    <span className="text-delaware mt-0.5 flex-shrink-0">•</span>
+                    {item}
+                  </li>
+                ))}
+              </ul>
+            </div>
+            <div>
+              <h4 className="text-xs font-semibold text-amber-600 uppercase tracking-wider mb-2">What keeps them up at night</h4>
+              <ul className="space-y-1.5">
+                {persona.keepsUpAtNight.map((item, i) => (
+                  <li key={i} className="text-sm text-gray-600 flex items-start gap-2">
+                    <span className="text-amber-500 mt-0.5 flex-shrink-0">•</span>
+                    {item}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          </div>
+        </div>
+      );
+    }
+
+    // ─── Sub-segment Filter ───
+    function SegmentFilter({ segments, selected, onSelect }) {
+      return (
+        <div className="mt-6">
+          <h4 className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">Filter by sub-segment (optional)</h4>
+          <div className="flex flex-wrap gap-2">
+            {segments.map((seg) => (
+              <button
+                key={seg.id}
+                onClick={() => onSelect(selected?.id === seg.id ? null : seg)}
+                className={`segment-chip text-xs px-3 py-1.5 rounded-full font-medium transition-all ${
+                  selected?.id === seg.id
+                    ? 'bg-delaware text-white shadow-sm'
+                    : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                }`}
+                title={seg.description}
+              >
+                {seg.short}
+              </button>
+            ))}
+          </div>
+        </div>
+      );
+    }
+
+    // ─── Storyline Section Blocks ───
+    function PainPointSection({ data }) {
+      return (
+        <div className="section-block bg-red-50 border border-red-100">
+          <h4 className="text-xs font-bold text-red-700 uppercase tracking-wider mb-2">Pain Point</h4>
+          <h5 className="font-bold text-gray-900 text-base mb-1">{data.headline}</h5>
+          <p className="text-sm text-gray-700 leading-relaxed mb-2">{data.description}</p>
+          <div className="flex items-start gap-2 bg-red-100/60 rounded-lg px-3 py-2">
+            <span className="text-red-500 text-xs mt-0.5">📊</span>
+            <p className="text-xs text-red-800 font-medium">{data.dataPoint}</p>
+          </div>
+        </div>
+      );
+    }
+
+    function StrategicPointsSection({ data }) {
+      return (
+        <div className="section-block bg-amber-50 border border-amber-100">
+          <h4 className="text-xs font-bold text-amber-700 uppercase tracking-wider mb-3">Strategic Talking Points</h4>
+          <div className="space-y-3">
+            {data.map((point, i) => (
+              <div key={i}>
+                <h5 className="font-semibold text-gray-900 text-sm">{point.headline}</h5>
+                <p className="text-xs text-gray-600 leading-relaxed mt-0.5">{point.detail}</p>
+              </div>
+            ))}
+          </div>
+        </div>
+      );
+    }
+
+    function TacticalSolutionsSection({ data }) {
+      return (
+        <div className="section-block bg-blue-50 border border-blue-100">
+          <h4 className="text-xs font-bold text-blue-700 uppercase tracking-wider mb-3">Tactical Solutions</h4>
+          <div className="grid sm:grid-cols-2 gap-2">
+            {data.map((sol, i) => (
+              <div key={i} className="bg-white/70 rounded-lg px-3 py-2.5 border border-blue-100">
+                <h5 className="font-semibold text-gray-900 text-sm">{sol.name}</h5>
+                <p className="text-xs text-gray-600 mt-0.5 leading-relaxed">{sol.description}</p>
+                <span className="inline-block text-[10px] text-blue-600 font-medium mt-1.5 bg-blue-100 px-2 py-0.5 rounded-full">{sol.partner}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      );
+    }
+
+    function MarketInsightsSection({ data }) {
+      return (
+        <div className="section-block bg-emerald-50 border border-emerald-100">
+          <h4 className="text-xs font-bold text-emerald-700 uppercase tracking-wider mb-3">Market Insights</h4>
+          <div className="space-y-2.5">
+            {data.map((insight, i) => (
+              <div key={i} className="flex items-start gap-2">
+                <span className="text-emerald-500 text-sm mt-0.5 flex-shrink-0">→</span>
+                <div>
+                  <p className="text-sm text-gray-800 font-medium">{insight.stat}</p>
+                  <p className="text-[10px] text-emerald-600 mt-0.5">{insight.source}</p>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      );
+    }
+
+    function ReferencesSection({ data }) {
+      return (
+        <div className="section-block bg-gray-50 border border-gray-200">
+          <h4 className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-2">Reference Customers</h4>
+          <div className="flex flex-wrap gap-2">
+            {data.map((name, i) => (
+              <span key={i} className="text-xs bg-white px-2.5 py-1 rounded-full border border-gray-200 text-gray-700 font-medium">{name}</span>
+            ))}
+          </div>
+        </div>
+      );
+    }
+
+    function ConversationStartersSection({ data }) {
+      return (
+        <div className="section-block bg-gray-50/50 border border-gray-100">
+          <h4 className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-2">Conversation Starters</h4>
+          <div className="space-y-2">
+            {data.map((q, i) => (
+              <div key={i} className="flex items-start gap-2">
+                <span className="text-gray-300 text-sm flex-shrink-0">💬</span>
+                <p className="text-sm text-gray-600 italic">"{q}"</p>
+              </div>
+            ))}
+          </div>
+        </div>
+      );
+    }
+
+    // ─── Storyline Card ───
+    function StorylineCard({ storyline, persona, segment, isOpen, onToggle }) {
+      const content = storyline.personas[persona.id];
+      const isRelevant = !segment || storyline.relevantSegments.includes(segment.id);
+
+      return (
+        <div className={`storyline-card bg-white rounded-xl border shadow-sm overflow-hidden ${
+          isRelevant ? 'border-gray-200' : 'border-gray-100 opacity-60'
+        }`}>
+          <button
+            onClick={onToggle}
+            className="w-full text-left px-5 py-4 flex items-center gap-4 hover:bg-gray-50 transition-colors"
+          >
+            <div className="w-1.5 h-12 rounded-full flex-shrink-0" style={{ backgroundColor: storyline.accent }} />
+            <div className="flex-1 min-w-0">
+              <div className="flex items-center gap-2 mb-0.5">
+                <span className="text-lg">{storyline.icon}</span>
+                <h3 className="font-bold text-gray-900 text-base">{storyline.name}</h3>
+                {segment && isRelevant && (
+                  <span className="text-[10px] bg-delaware/10 text-delaware px-2 py-0.5 rounded-full font-medium flex-shrink-0">Relevant</span>
+                )}
+              </div>
+              <p className="text-sm text-gray-500 truncate">{content.painPoint.headline}</p>
+            </div>
+            <svg className={`chevron w-5 h-5 text-gray-400 flex-shrink-0 ${isOpen ? 'open' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+            </svg>
+          </button>
+
+          <div className={`storyline-content ${isOpen ? 'open' : ''}`}>
+            <div className="px-5 pb-5 space-y-0">
+              <PainPointSection data={content.painPoint} />
+              <StrategicPointsSection data={content.strategicTalkingPoints} />
+              <TacticalSolutionsSection data={content.tacticalSolutions} />
+              <MarketInsightsSection data={content.marketInsights} />
+              <ReferencesSection data={content.referenceCustomers} />
+              <ConversationStartersSection data={content.conversationStarters} />
+            </div>
+          </div>
+        </div>
+      );
+    }
+
+    // ─── App Root (Single Page) ───
+    function App() {
+      const { data, loading, source } = usePlaybookData();
+      const [selectedPersona, setSelectedPersona] = useState(null);
+      const [selectedSegment, setSelectedSegment] = useState(null);
+      const [openCards, setOpenCards] = useState({});
+
+      if (loading) {
+        return (
+          <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+            <div className="text-center">
+              <div className="w-10 h-10 bg-delaware rounded-lg flex items-center justify-center mx-auto mb-3 animate-pulse">
+                <span className="text-white font-bold text-xl">d</span>
+              </div>
+              <p className="text-sm text-gray-400">Loading playbook...</p>
+            </div>
+          </div>
+        );
+      }
+
+      const { personas: appPersonas, subSegments: appSubSegments, storylines: appStorylines } = data;
+
+      const allOpen = appStorylines.every(s => openCards[s.id]);
+
+      const toggleCard = (id) => {
+        setOpenCards(prev => ({ ...prev, [id]: !prev[id] }));
+      };
+
+      const toggleAll = () => {
+        if (allOpen) {
+          setOpenCards({});
+        } else {
+          const all = {};
+          appStorylines.forEach(s => { all[s.id] = true; });
+          setOpenCards(all);
+        }
+      };
+
+      const SALES_PLAYS = [
+        {
+          title: "Operational Backbone",
+          description: "Modernise core systems and build operational resilience across supply chain, compliance, and cybersecurity.",
+          color: "#f59e0b",
+          borderColor: "border-amber-200",
+          bgColor: "bg-amber-50",
+          textColor: "text-amber-700",
+          ids: ["erp-evolves", "resilience-compliance"]
+        },
+        {
+          title: "Empower Your Factory Together with Your People",
+          description: "Unlock knowledge, modernise the shopfloor, and equip frontline workers with digital tools.",
+          color: "#8b5cf6",
+          borderColor: "border-violet-200",
+          bgColor: "bg-violet-50",
+          textColor: "text-violet-700",
+          ids: ["talent-knowledge", "factory-of-the-future", "frontline-workers"]
+        },
+        {
+          title: "Digital Growth",
+          description: "Grow revenue through digital channels, servitization, and superior customer experience.",
+          color: "#ec4899",
+          borderColor: "border-pink-200",
+          bgColor: "bg-pink-50",
+          textColor: "text-pink-700",
+          ids: ["digital-business"]
+        }
+      ];
+
+      const transversal = appStorylines.find(s => s.id === "value-of-data");
+
+      return (
+        <div className="min-h-screen bg-gray-50">
+          <Header persona={selectedPersona} segment={selectedSegment} onBack={() => { setSelectedPersona(null); setSelectedSegment(null); setOpenCards({}); window.scrollTo(0,0); }} />
+
+          <div className="max-w-5xl mx-auto px-4 py-8">
+            {/* ── Persona Selection ── */}
+            <div className="text-center mb-8">
+              <h2 className="text-2xl sm:text-3xl font-extrabold text-gray-900">Who are you talking to?</h2>
+              <p className="text-sm text-gray-400 mt-1">Select a persona to see tailored storylines and talking points</p>
+            </div>
+
+            <div className="grid sm:grid-cols-3 gap-4">
+              {appPersonas.map((p) => (
+                <PersonaCard
+                  key={p.id}
+                  persona={p}
+                  selected={selectedPersona?.id === p.id}
+                  onClick={() => {
+                    setSelectedPersona(selectedPersona?.id === p.id ? null : p);
+                    setOpenCards({});
+                  }}
+                />
+              ))}
+            </div>
+
+            {/* ── Persona Profile + Segment Filter ── */}
+            {selectedPersona && (
+              <>
+                <PersonaProfile persona={selectedPersona} />
+                <SegmentFilter segments={appSubSegments} selected={selectedSegment} onSelect={setSelectedSegment} />
+
+                {/* ── Sales Plays ── */}
+                <div className="mt-10 max-w-3xl mx-auto fade-in">
+                  <div className="flex items-center justify-between mb-6">
+                    <h2 className="text-lg font-bold text-gray-900">
+                      MAKE Sales Plays
+                      <span className="text-gray-400 font-normal text-sm ml-2">for {selectedPersona.label}</span>
+                    </h2>
+                    <button
+                      onClick={toggleAll}
+                      className="text-xs text-gray-400 hover:text-gray-600 font-medium transition-colors"
+                    >
+                      {allOpen ? 'Collapse all' : 'Expand all'}
+                    </button>
+                  </div>
+
+                  <div className="space-y-8">
+                    {SALES_PLAYS.map((play, pi) => {
+                      const playStorylines = play.ids.map(id => appStorylines.find(s => s.id === id)).filter(Boolean);
+                      const sorted = selectedSegment
+                        ? [...playStorylines].sort((a, b) => {
+                            const aRel = a.relevantSegments.includes(selectedSegment.id) ? 0 : 1;
+                            const bRel = b.relevantSegments.includes(selectedSegment.id) ? 0 : 1;
+                            return aRel - bRel;
+                          })
+                        : playStorylines;
+
+                      return (
+                        <div key={pi}>
+                          <div className={`rounded-xl ${play.bgColor} border ${play.borderColor} px-5 py-4 mb-3`}>
+                            <div className="flex items-center gap-3">
+                              <div className="w-1.5 h-10 rounded-full flex-shrink-0" style={{ backgroundColor: play.color }} />
+                              <div>
+                                <h3 className={`font-bold text-base ${play.textColor}`}>
+                                  {play.title}
+                                </h3>
+                                <p className="text-xs text-gray-500 mt-0.5">{play.description}</p>
+                              </div>
+                            </div>
+                          </div>
+                          <div className="space-y-3 ml-0 sm:ml-3">
+                            {sorted.map((storyline) => (
+                              <StorylineCard
+                                key={storyline.id}
+                                storyline={storyline}
+                                persona={selectedPersona}
+                                segment={selectedSegment}
+                                isOpen={!!openCards[storyline.id]}
+                                onToggle={() => toggleCard(storyline.id)}
+                              />
+                            ))}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+
+                  {/* ── Transversal: Value of Data ── */}
+                  {transversal && (
+                    <div className="mt-10">
+                      <div className="rounded-xl bg-emerald-50 border border-emerald-200 px-5 py-4 mb-3">
+                        <div className="flex items-center gap-3">
+                          <div className="flex-shrink-0 w-8 h-8 rounded-full bg-emerald-100 border border-emerald-300 flex items-center justify-center">
+                            <span className="text-sm">📊</span>
+                          </div>
+                          <div>
+                            <h3 className="font-bold text-base text-emerald-700">
+                              Transversal
+                              <span className="font-normal text-gray-400 text-sm ml-2">— Value of Data</span>
+                            </h3>
+                            <p className="text-xs text-gray-500 mt-0.5">Data strategy and manufacturing intelligence — the foundation that powers every sales play above.</p>
+                          </div>
+                        </div>
+                      </div>
+                      <div className="ml-0 sm:ml-3 relative">
+                        <StorylineCard
+                          storyline={transversal}
+                          persona={selectedPersona}
+                          segment={selectedSegment}
+                          isOpen={!!openCards[transversal.id]}
+                          onToggle={() => toggleCard(transversal.id)}
+                        />
+                      </div>
+                    </div>
+                  )}
+
+                  <div className="mt-8 text-center text-xs text-gray-300">
+                    delaware Manufacturing Playbook · Internal Use Only
+                    {source !== 'static' && <span className="ml-2">· Live data</span>}
+                  </div>
+                </div>
+              </>
+            )}
+          </div>
+        </div>
+      );
+    }
+
+    ReactDOM.createRoot(document.getElementById('root')).render(<App />);
+  </script>
+</body>
+</html>
