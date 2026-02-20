@@ -40,8 +40,8 @@
     const { useState, useEffect, useCallback, useRef } = React;
 
     // ─── Supabase Config (same as main app) ───
-    const SUPABASE_URL = '';
-    const SUPABASE_ANON_KEY = '';
+    const SUPABASE_URL = 'https://agcjvxedncwiklyamrvj.supabase.co';
+    const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFnY2p2eGVkbmN3aWtseWFtcnZqIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzE0MTY1NjcsImV4cCI6MjA4Njk5MjU2N30.DWEa1hPeIx57nN2nHmFVOSu1QAWjRVsSgSpGHyj85tg';
     const supabaseConfigured = !!(SUPABASE_URL && SUPABASE_ANON_KEY);
     const sb = supabaseConfigured ? window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY) : null;
 
