@@ -267,18 +267,57 @@
       );
     }
 
-    function StrategicPointsSection({ data }) {
+    function StrategicPointsSection({ data, aiData }) {
+      const points = aiData || data;
       return (
-        <div className="section-block bg-amber-50 border border-amber-100">
-          <h4 className="text-xs font-bold text-amber-700 uppercase tracking-wider mb-3">Strategic Talking Points</h4>
+        <div className={`section-block ${aiData ? 'bg-violet-50 border border-violet-200' : 'bg-amber-50 border border-amber-100'}`}>
+          <div className="flex items-center gap-2 mb-3">
+            <h4 className={`text-xs font-bold uppercase tracking-wider ${aiData ? 'text-violet-700' : 'text-amber-700'}`}>Strategic Talking Points</h4>
+            {aiData && <span className="text-[10px] bg-violet-200 text-violet-800 px-1.5 py-0.5 rounded-full font-semibold">✨ AI gepersonaliseerd</span>}
+          </div>
           <div className="space-y-3">
-            {data.map((point, i) => (
+            {points.map((point, i) => (
               <div key={i}>
                 <h5 className="font-semibold text-gray-900 text-sm">{point.headline}</h5>
                 <p className="text-xs text-gray-600 leading-relaxed mt-0.5">{point.detail}</p>
               </div>
             ))}
           </div>
+        </div>
+      );
+    }
+
+    // ─── Customer Context Panel ───
+    function CustomerContextPanel({ context, onChange }) {
+      return (
+        <div className="mt-6 bg-violet-50 border border-violet-200 rounded-xl p-4">
+          <div className="flex items-center gap-2 mb-3">
+            <span className="text-sm">🎯</span>
+            <h4 className="text-sm font-bold text-violet-800">Klantcontext voor AI personalisatie</h4>
+          </div>
+          <div className="grid sm:grid-cols-2 gap-3">
+            <div>
+              <label className="block text-xs font-semibold text-violet-700 mb-1">Bedrijfsnaam</label>
+              <input
+                className="w-full border border-violet-200 rounded-lg px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-violet-300"
+                placeholder="bv. Daikin"
+                value={context.companyName}
+                onChange={e => onChange({ ...context, companyName: e.target.value })}
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-semibold text-violet-700 mb-1">Extra context (optioneel)</label>
+              <input
+                className="w-full border border-violet-200 rounded-lg px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-violet-300"
+                placeholder="bv. recent fusie, expansie naar EU..."
+                value={context.extraInfo}
+                onChange={e => onChange({ ...context, extraInfo: e.target.value })}
+              />
+            </div>
+          </div>
+          {context.companyName && (
+            <p className="text-xs text-violet-600 mt-2">✓ Open een storyline en klik op "Personaliseer" om AI talking points te genereren voor {context.companyName}.</p>
+          )}
         </div>
       );
     }
@@ -349,9 +388,11 @@
     }
 
     // ─── Storyline Card ───
-    function StorylineCard({ storyline, persona, segment, isOpen, onToggle }) {
+    function StorylineCard({ storyline, persona, segment, isOpen, onToggle, customerContext, aiTalkingPoints, onPersonalize, personalizing }) {
       const content = storyline.personas[persona.id];
       const isRelevant = !segment || storyline.relevantSegments.includes(segment.id);
+      const aiPoints = aiTalkingPoints && aiTalkingPoints[storyline.id];
+      const isPersonalizing = personalizing && personalizing[storyline.id];
 
       return (
         <div className={`storyline-card bg-white rounded-xl border shadow-sm overflow-hidden ${
@@ -369,6 +410,7 @@
                 {segment && isRelevant && (
                   <span className="text-[10px] bg-delaware/10 text-delaware px-2 py-0.5 rounded-full font-medium flex-shrink-0">Relevant</span>
                 )}
+                {aiPoints && <span className="text-[10px] bg-violet-100 text-violet-700 px-2 py-0.5 rounded-full font-medium flex-shrink-0">✨ AI</span>}
               </div>
               <p className="text-sm text-gray-500 truncate">{content.painPoint.headline}</p>
             </div>
@@ -380,7 +422,18 @@
           <div className={`storyline-content ${isOpen ? 'open' : ''}`}>
             <div className="px-5 pb-5 space-y-0">
               <PainPointSection data={content.painPoint} />
-              <StrategicPointsSection data={content.strategicTalkingPoints} />
+              <StrategicPointsSection data={content.strategicTalkingPoints} aiData={aiPoints} />
+              {customerContext && customerContext.companyName && (
+                <div className="flex justify-end -mt-2 mb-2">
+                  <button
+                    onClick={() => onPersonalize(storyline)}
+                    disabled={isPersonalizing}
+                    className="text-xs bg-violet-600 hover:bg-violet-700 disabled:opacity-50 text-white font-medium px-3 py-1.5 rounded-lg transition-colors flex items-center gap-1.5"
+                  >
+                    {isPersonalizing ? '✨ Genereren...' : aiPoints ? `✨ Hergeneer voor ${customerContext.companyName}` : `✨ Personaliseer voor ${customerContext.companyName}`}
+                  </button>
+                </div>
+              )}
               <TacticalSolutionsSection data={content.tacticalSolutions} />
               <MarketInsightsSection data={content.marketInsights} />
               <ReferencesSection data={content.referenceCustomers} />
@@ -397,6 +450,37 @@
       const [selectedPersona, setSelectedPersona] = useState(null);
       const [selectedSegment, setSelectedSegment] = useState(null);
       const [openCards, setOpenCards] = useState({});
+      const [customerContext, setCustomerContext] = useState({ companyName: '', extraInfo: '' });
+      const [aiTalkingPoints, setAiTalkingPoints] = useState({});
+      const [personalizing, setPersonalizing] = useState({});
+
+      const personalizeStoryline = async (storyline) => {
+        if (!selectedPersona || !customerContext.companyName) return;
+        const content = storyline.personas[selectedPersona.id];
+        setPersonalizing(prev => ({ ...prev, [storyline.id]: true }));
+        try {
+          const res = await fetch(`${SUPABASE_URL}/functions/v1/personalize-talking-points`, {
+            method: 'POST',
+            headers: {
+              'Authorization': `Bearer ${SUPABASE_ANON_KEY}`,
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+              personaLabel: selectedPersona.label,
+              storylineName: storyline.name,
+              talkingPoints: content.strategicTalkingPoints,
+              customerContext,
+            }),
+          });
+          const json = await res.json();
+          if (json.talkingPoints) {
+            setAiTalkingPoints(prev => ({ ...prev, [storyline.id]: json.talkingPoints }));
+          }
+        } catch (err) {
+          console.error('Personalisatie mislukt:', err);
+        }
+        setPersonalizing(prev => ({ ...prev, [storyline.id]: false }));
+      };
 
       if (loading) {
         return (
@@ -491,6 +575,7 @@
               <>
                 <PersonaProfile persona={selectedPersona} />
                 <SegmentFilter segments={appSubSegments} selected={selectedSegment} onSelect={setSelectedSegment} />
+                <CustomerContextPanel context={customerContext} onChange={setCustomerContext} />
 
                 {/* ── Sales Plays ── */}
                 <div className="mt-10 max-w-3xl mx-auto fade-in">
@@ -540,6 +625,10 @@
                                 segment={selectedSegment}
                                 isOpen={!!openCards[storyline.id]}
                                 onToggle={() => toggleCard(storyline.id)}
+                                customerContext={customerContext}
+                                aiTalkingPoints={aiTalkingPoints}
+                                onPersonalize={personalizeStoryline}
+                                personalizing={personalizing}
                               />
                             ))}
                           </div>
@@ -572,6 +661,10 @@
                           segment={selectedSegment}
                           isOpen={!!openCards[transversal.id]}
                           onToggle={() => toggleCard(transversal.id)}
+                          customerContext={customerContext}
+                          aiTalkingPoints={aiTalkingPoints}
+                          onPersonalize={personalizeStoryline}
+                          personalizing={personalizing}
                         />
                       </div>
                     </div>
