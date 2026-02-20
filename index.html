@@ -466,7 +466,7 @@
         const content = storyline.personas[selectedPersona.id];
         setPersonalizing(prev => ({ ...prev, [storyline.id]: true }));
         try {
-          const url = `${SUPABASE_URL}/functions/v1/personalize-talking-points`;
+          const url = `${SUPABASE_URL}/functions/v1/personalize-tp`;
           console.log('[Personaliseer] Fetch naar:', url);
           const res = await fetch(url, {
             method: 'POST',
