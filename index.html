@@ -455,11 +455,17 @@
       const [personalizing, setPersonalizing] = useState({});
 
       const personalizeStoryline = async (storyline) => {
-        if (!selectedPersona || !customerContext.companyName) return;
+        console.log('[Personaliseer] Klik ontvangen', { storylineId: storyline.id, selectedPersona: selectedPersona?.id, companyName: customerContext.companyName });
+        if (!selectedPersona || !customerContext.companyName) {
+          console.warn('[Personaliseer] Gestopt – selectedPersona:', selectedPersona, '| companyName:', customerContext.companyName);
+          return;
+        }
         const content = storyline.personas[selectedPersona.id];
         setPersonalizing(prev => ({ ...prev, [storyline.id]: true }));
         try {
-          const res = await fetch(`${SUPABASE_URL}/functions/v1/personalize-talking-points`, {
+          const url = `${SUPABASE_URL}/functions/v1/personalize-talking-points`;
+          console.log('[Personaliseer] Fetch naar:', url);
+          const res = await fetch(url, {
             method: 'POST',
             headers: {
               'Authorization': `Bearer ${SUPABASE_ANON_KEY}`,
@@ -472,12 +478,16 @@
               customerContext,
             }),
           });
+          console.log('[Personaliseer] HTTP status:', res.status, res.statusText);
           const json = await res.json();
+          console.log('[Personaliseer] Response:', json);
           if (json.talkingPoints) {
             setAiTalkingPoints(prev => ({ ...prev, [storyline.id]: json.talkingPoints }));
+          } else {
+            console.warn('[Personaliseer] Geen talkingPoints in response:', json);
           }
         } catch (err) {
-          console.error('Personalisatie mislukt:', err);
+          console.error('[Personaliseer] Fetch mislukt:', err);
         }
         setPersonalizing(prev => ({ ...prev, [storyline.id]: false }));
       };
