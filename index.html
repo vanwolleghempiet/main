@@ -490,7 +490,7 @@
             console.warn('[Personaliseer] Geen talkingPoints in response:', json);
           }
         } catch (err) {
-          console.error('[Personaliseer] Fetch mislukt:', err);
+          console.error('[Personaliseer] Fetch mislukt:', err?.name, err?.message, JSON.stringify(err));
         }
         setPersonalizing(prev => ({ ...prev, [storyline.id]: false }));
       };
