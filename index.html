@@ -47,8 +47,8 @@
 
     // ─── Supabase Config ───
     // Replace these with your Supabase project URL and anon key
-    const SUPABASE_URL = '';  // e.g. 'https://xxxxx.supabase.co'
-    const SUPABASE_ANON_KEY = '';  // e.g. 'eyJhbGciOi...'
+    const SUPABASE_URL = 'https://agcjvxedncwiklyamrvj.supabase.co';
+    const SUPABASE_ANON_KEY = 'sb_publishable_EMZezZt4i8dIFGvE_997Og_YQUgjGc9';
 
     // ─── Data Loading Hook ───
     function usePlaybookData() {
@@ -161,8 +161,15 @@
                   >
                   Change
                 </button>
-              </div>
-            )}
+                </>
+              )}
+              <a
+                href="admin.html"
+                className="text-xs text-gray-400 hover:text-gray-600 font-medium px-2 py-1.5 rounded-md hover:bg-gray-100 transition-colors"
+              >
+                Admin
+              </a>
+            </div>
           </div>
         </header>
       );

@@ -40,10 +40,19 @@
     const { useState, useEffect, useCallback, useRef } = React;
 
     // ─── Supabase Config (same as main app) ───
-    const SUPABASE_URL = '';
-    const SUPABASE_ANON_KEY = '';
+    const SUPABASE_URL = 'https://agcjvxedncwiklyamrvj.supabase.co';
+    const SUPABASE_ANON_KEY = 'sb_publishable_EMZezZt4i8dIFGvE_997Og_YQUgjGc9';
     const supabaseConfigured = !!(SUPABASE_URL && SUPABASE_ANON_KEY);
-    const sb = supabaseConfigured ? window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY) : null;
+    let sb = null;
+    let supabaseInitError = null;
+    if (supabaseConfigured) {
+      try {
+        sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+      } catch (e) {
+        supabaseInitError = e.message;
+        console.error('Supabase init failed:', e);
+      }
+    }
 
     // ─── Toast ───
     function Toast({ message, type }) {
@@ -173,8 +182,9 @@
       useEffect(() => {
         async function load() {
           if (sb) {
-            const { data } = await sb.from('personas').select('*');
-            setPersonas(data.map(p => ({
+            const { data, error } = await sb.from('personas').select('*');
+            if (error) { console.error('personas fetch:', error.message); return; }
+            setPersonas((data || []).map(p => ({
               id: p.id, label: p.label, subtitle: p.subtitle, emoji: p.emoji, focus: p.focus,
               careMost: p.care_most || [], keepsUpAtNight: p.keeps_up_at_night || [],
             })));
@@ -257,8 +267,9 @@
       useEffect(() => {
         async function load() {
           if (sb) {
-            const { data } = await sb.from('sub_segments').select('*');
-            setSegments(data);
+            const { data, error } = await sb.from('sub_segments').select('*');
+            if (error) { console.error('sub_segments fetch:', error.message); return; }
+            setSegments(data || []);
           } else {
             setSegments(JSON.parse(JSON.stringify(SUB_SEGMENTS)));
           }
@@ -310,8 +321,9 @@
       useEffect(() => {
         async function load() {
           if (sb) {
-            const { data } = await sb.from('storylines').select('*').order('sort_order');
-            setStorylines(data.map(s => ({
+            const { data, error } = await sb.from('storylines').select('*').order('sort_order');
+            if (error) { console.error('storylines fetch:', error.message); return; }
+            setStorylines((data || []).map(s => ({
               id: s.id, name: s.name, icon: s.icon, accent: s.accent,
               relevantSegments: s.relevant_segments || [], sortOrder: s.sort_order,
             })));
@@ -411,9 +423,12 @@
               sb.from('personas').select('id, label, emoji'),
               sb.from('storyline_content').select('*'),
             ]);
-            setStorylines(slRes.data);
-            setPersonas(pRes.data);
-            setContent(cRes.data.map(c => ({
+            if (slRes.error) { console.error('storylines fetch:', slRes.error.message); }
+            if (pRes.error) { console.error('personas fetch:', pRes.error.message); }
+            if (cRes.error) { console.error('storyline_content fetch:', cRes.error.message); }
+            setStorylines(slRes.data || []);
+            setPersonas(pRes.data || []);
+            setContent((cRes.data || []).map(c => ({
               id: c.id,
               storylineId: c.storyline_id,
               personaId: c.persona_id,
@@ -681,7 +696,12 @@
 
           {/* Tab content */}
           <div className="max-w-5xl mx-auto px-4 py-6">
-            {!supabaseConfigured && (
+            {supabaseInitError && (
+              <div className="bg-red-50 border border-red-200 rounded-xl px-4 py-3 mb-6 text-sm text-red-800">
+                <strong>Supabase init error:</strong> {supabaseInitError}. Check that your anon key is correct (it should start with <code className="bg-red-100 px-1 rounded text-xs">eyJ…</code>).
+              </div>
+            )}
+            {!supabaseConfigured && !supabaseInitError && (
               <div className="bg-amber-50 border border-amber-200 rounded-xl px-4 py-3 mb-6 text-sm text-amber-800">
                 <strong>Static mode:</strong> Supabase is not configured. You can preview the editor, but changes won't be saved.
                 Set <code className="bg-amber-100 px-1 rounded text-xs">SUPABASE_URL</code> and <code className="bg-amber-100 px-1 rounded text-xs">SUPABASE_ANON_KEY</code> in both <code className="bg-amber-100 px-1 rounded text-xs">admin.html</code> and <code className="bg-amber-100 px-1 rounded text-xs">index.html</code> to enable saving.

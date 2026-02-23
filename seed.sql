@@ -66,6 +66,11 @@ CREATE POLICY "Allow public read on sub_segments" ON sub_segments FOR SELECT USI
 CREATE POLICY "Allow public read on storylines" ON storylines FOR SELECT USING (true);
 CREATE POLICY "Allow public read on storyline_content" ON storyline_content FOR SELECT USING (true);
 
+CREATE POLICY "Allow public write on personas" ON personas FOR UPDATE USING (true) WITH CHECK (true);
+CREATE POLICY "Allow public write on sub_segments" ON sub_segments FOR UPDATE USING (true) WITH CHECK (true);
+CREATE POLICY "Allow public write on storylines" ON storylines FOR UPDATE USING (true) WITH CHECK (true);
+CREATE POLICY "Allow public write on storyline_content" ON storyline_content FOR UPDATE USING (true) WITH CHECK (true);
+
 -- ═══════════════════════════════════════════════════════
 -- 4. INSERT PERSONAS
 -- ═══════════════════════════════════════════════════════
