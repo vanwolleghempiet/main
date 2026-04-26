@@ -1,0 +1,222 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Drinkt Piet al terug?</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    body {
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      font-family: 'Georgia', serif;
+      background: #0d1117;
+      color: #fff;
+      text-align: center;
+      overflow: hidden;
+      transition: background 1s ease;
+    }
+
+    body.yes-mode { animation: bgPulse 2s infinite alternate; }
+
+    @keyframes bgPulse {
+      from { background: #0a2a0a; }
+      to   { background: #1a4a1a; }
+    }
+
+    h1 {
+      font-size: clamp(1.8rem, 5vw, 3.5rem);
+      letter-spacing: 0.05em;
+      margin-bottom: 2rem;
+      color: #e0c97f;
+      text-shadow: 0 0 20px rgba(224, 201, 127, 0.4);
+    }
+
+    #answer {
+      font-size: clamp(7rem, 28vw, 20rem);
+      font-weight: 900;
+      line-height: 1;
+      text-transform: uppercase;
+      transition: all 0.5s ease;
+    }
+
+    #answer.no {
+      color: #e84545;
+      text-shadow:
+        0 0 30px rgba(232, 69, 69, 0.6),
+        0 0 60px rgba(232, 69, 69, 0.3);
+    }
+
+    #answer.yes {
+      color: #4cff72;
+      text-shadow:
+        0 0 30px rgba(76, 255, 114, 0.8),
+        0 0 80px rgba(76, 255, 114, 0.5);
+      animation: yesGlow 1s infinite alternate;
+    }
+
+    @keyframes yesGlow {
+      from { text-shadow: 0 0 30px rgba(76,255,114,0.8), 0 0 80px rgba(76,255,114,0.5); }
+      to   { text-shadow: 0 0 60px rgba(76,255,114,1),   0 0 140px rgba(76,255,114,0.9); }
+    }
+
+    #countdown {
+      margin-top: 2.5rem;
+      font-size: clamp(1rem, 3vw, 1.6rem);
+      color: #7788aa;
+      letter-spacing: 0.08em;
+    }
+
+    #countdown .block {
+      display: inline-flex;
+      flex-direction: column;
+      align-items: center;
+      margin: 0 0.6em;
+    }
+
+    #countdown .num {
+      font-size: 1.4em;
+      font-weight: 700;
+      color: #aabbdd;
+    }
+
+    #countdown .lbl {
+      font-size: 0.55em;
+      color: #445566;
+      text-transform: uppercase;
+      letter-spacing: 0.15em;
+      margin-top: 0.1em;
+    }
+
+    #celebration {
+      font-size: clamp(1.2rem, 4vw, 2rem);
+      color: #ffe97a;
+      margin-top: 1.5rem;
+      opacity: 0;
+      transition: opacity 1s ease;
+      letter-spacing: 0.1em;
+    }
+
+    #celebration.show {
+      opacity: 1;
+      animation: bounce 1.2s ease-in-out infinite alternate;
+    }
+
+    @keyframes bounce {
+      from { transform: translateY(0); }
+      to   { transform: translateY(-12px); }
+    }
+
+    canvas {
+      position: fixed;
+      top: 0; left: 0;
+      width: 100%; height: 100%;
+      pointer-events: none;
+      display: none;
+    }
+
+    canvas.active { display: block; }
+  </style>
+</head>
+<body>
+  <canvas id="confetti"></canvas>
+
+  <h1>Drinkt Piet al terug?</h1>
+  <div id="answer" class="no">NEE</div>
+  <div id="celebration"></div>
+  <div id="countdown"></div>
+
+  <script>
+    const TARGET = new Date('2026-05-02T00:00:00');
+    const answerEl  = document.getElementById('answer');
+    const cdEl      = document.getElementById('countdown');
+    const celebEl   = document.getElementById('celebration');
+    const canvas    = document.getElementById('confetti');
+    const ctx       = canvas.getContext('2d');
+    let particles   = [];
+    let yesShown    = false;
+
+    function pad(n) { return String(n).padStart(2, '0'); }
+
+    function block(val, label) {
+      return `<span class="block"><span class="num">${pad(val)}</span><span class="lbl">${label}</span></span>`;
+    }
+
+    function tick() {
+      const now  = new Date();
+      const diff = TARGET - now;
+
+      if (diff > 0) {
+        const d = Math.floor(diff / 86400000);
+        const h = Math.floor((diff % 86400000) / 3600000);
+        const m = Math.floor((diff % 3600000)  / 60000);
+        const s = Math.floor((diff % 60000)    / 1000);
+        cdEl.innerHTML = block(d,'dagen') + block(h,'uur') + block(m,'min') + block(s,'sec');
+      } else if (!yesShown) {
+        yesShown = true;
+        answerEl.textContent = 'JA';
+        answerEl.className   = 'yes';
+        document.body.classList.add('yes-mode');
+        cdEl.innerHTML       = '';
+        celebEl.textContent  = '🎉 Proost, Piet! 🍺';
+        celebEl.classList.add('show');
+        startConfetti();
+      }
+    }
+
+    // ── Confetti ──
+    const COLORS = ['#ff4444','#ffcc00','#44ff88','#44aaff','#ff44cc','#ffaa44','#aaffee','#ff8844'];
+
+    function newParticle(x) {
+      return {
+        x:   x !== undefined ? x : Math.random() * canvas.width,
+        y:   -12,
+        vx:  (Math.random() - 0.5) * 5,
+        vy:  2.5 + Math.random() * 4,
+        rot: Math.random() * Math.PI * 2,
+        rv:  (Math.random() - 0.5) * 0.15,
+        w:   7 + Math.random() * 9,
+        h:   9 + Math.random() * 7,
+        col: COLORS[Math.floor(Math.random() * COLORS.length)],
+      };
+    }
+
+    function startConfetti() {
+      canvas.classList.add('active');
+      canvas.width  = innerWidth;
+      canvas.height = innerHeight;
+      for (let i = 0; i < 150; i++) {
+        const p = newParticle();
+        p.y = Math.random() * canvas.height;
+        particles.push(p);
+      }
+      requestAnimationFrame(frame);
+    }
+
+    function frame() {
+      canvas.width  = innerWidth;
+      canvas.height = innerHeight;
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      if (Math.random() < 0.35) particles.push(newParticle());
+      particles = particles.filter(p => p.y < canvas.height + 20);
+      for (const p of particles) {
+        p.x += p.vx; p.y += p.vy; p.rot += p.rv;
+        ctx.save();
+        ctx.translate(p.x, p.y);
+        ctx.rotate(p.rot);
+        ctx.fillStyle = p.col;
+        ctx.fillRect(-p.w / 2, -p.h / 2, p.w, p.h);
+        ctx.restore();
+      }
+      requestAnimationFrame(frame);
+    }
+
+    tick();
+    setInterval(tick, 1000);
+  </script>
+</body>
+</html>
